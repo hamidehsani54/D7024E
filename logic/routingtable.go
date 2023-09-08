@@ -1,4 +1,4 @@
-package d7024e
+package logic
 
 const bucketSize = 20
 

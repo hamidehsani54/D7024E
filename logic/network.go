@@ -1,6 +1,10 @@
-package d7024e
+package logic
 
-type 	 struct {
+type Network struct {
+}
+
+func MyFunction() string {
+    return "Hello from file1!"
 }
 
 func Listen(ip string, port int) {

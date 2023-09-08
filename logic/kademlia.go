@@ -1,4 +1,4 @@
-package d7024e
+package logic
 
 type Kademlia struct {
 }

@@ -31,6 +31,8 @@ services:
     image: kadlab:latest 
     stdin_open: true
     tty: true
+    environment:
+      - master=true  
     networks:
       kademlia_network:
         ipv4_address: 10.10.0.10

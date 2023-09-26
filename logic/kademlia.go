@@ -17,17 +17,11 @@ type allContacts struct {
 
 const alpha = 3
 func (kademlia *Kademlia) JoinNetwork() {
-	fmt.Println("Joining started...")
-	// add bootstrap node to routing table
+	
+	// Add master node to contacts, with the known values
 	kademlia.Network.rt.AddContact(NewContact(NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51"), "10.10.0.10"))
-    
-	// lookup on itself
-	res := kademlia.LookupContact(kademlia.Network.Node.ID)
 
-	fmt.Println("Join lookup result:")
-	for _, c := range res {
-		fmt.Println("  ", c.String())
-	}
+	kademlia.LookupContact(kademlia.Network.Node.ID)
 }
 
 func InitKademlia(network *Network) *Kademlia {
@@ -37,7 +31,7 @@ func InitKademlia(network *Network) *Kademlia {
 }
 
 func (kademlia *Kademlia) LookupContact(target *KademliaID) []Contact {
-    fmt.Println("LookupContact started...")
+    fmt.Println("LookupContact-------")
 	contacts := kademlia.iterativeFindNode(target)
 	return contacts
 }
@@ -67,8 +61,9 @@ func (kademlia *Kademlia) iterativeFindNode(nodeID *KademliaID) []Contact {
             }  
         }
         /*
-        if allContacts.HasConverged() { // Some condition to check if you're no longer finding closer nodes
-            close(resultsChan)
+        Add condition so that we dont continue for too long.
+        Take the K first from our sorted list and query the nodes that has not yet been visited/queried
+        insert the new nodes in the list and keep it sorted, repeat until the top K is visited.
         }*/
     }
 
@@ -76,9 +71,11 @@ func (kademlia *Kademlia) iterativeFindNode(nodeID *KademliaID) []Contact {
 }
 
 func (kademlia *Kademlia) queryNodeForClosestContacts(contact Contact, target *KademliaID, ch chan []Contact) {
-    contacts := kademlia.Network.SendFindContactMessage(&contact).Contact
+    fmt.Println(&contact)
+    c := kademlia.Network.SendFindContactMessage(&contact, target)
+    fmt.Println(c.Contacts)
     //Ta bara K närmaste
-    ch <- contacts
+    ch <- c.Contacts
 }
 
 func (s *allContacts) Add(contact Contact, target *KademliaID) {
@@ -92,7 +89,7 @@ func (s *allContacts) Add(contact Contact, target *KademliaID) {
 
     contact.CalcDistance(target)
 
-    // Find the position to insert using binary search
+    // Find the position to insert element
     position := sort.Search(len(s.Contacts), func(i int) bool {
         return s.Contacts[i].distance.Less(contact.distance) || s.Contacts[i].distance.Equals(contact.distance)
     })
@@ -101,26 +98,6 @@ func (s *allContacts) Add(contact Contact, target *KademliaID) {
     s.Contacts = append(s.Contacts, Contact{})
     copy(s.Contacts[position+1:], s.Contacts[position:])
     s.Contacts[position] = contact
-}
-
-
-func (kademlia *Kademlia) sortTakeK(contacts []Contact, alpha int) []Contact {
-    // Compute distances to the target (each contact is its own target)
-    for i := range contacts {
-        contacts[i].CalcDistance(contacts[i].ID)
-    }
-
-    // Sort based on computed distance
-    sort.Slice(contacts, func(i, j int) bool {
-        return contacts[i].Less(&contacts[j])
-    })
-
-    // Take the first alpha contacts
-    if len(contacts) > alpha {
-        return contacts[:alpha]
-    }
-
-    return contacts
 }
 
 func (kademlia *Kademlia) LookupData(hash string) {

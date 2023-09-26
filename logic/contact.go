@@ -50,6 +50,9 @@ func (candidates *ContactCandidates) GetContacts(count int) []Contact {
 	return candidates.contacts[:count]
 }
 
+func (candidates *ContactCandidates) GetAllContacts(count int) []Contact {
+	return candidates.contacts
+}
 // Sort the Contacts in ContactCandidates
 func (candidates *ContactCandidates) Sort() {
 	sort.Sort(candidates)

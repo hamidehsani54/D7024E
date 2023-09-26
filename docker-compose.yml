@@ -8,6 +8,17 @@
 version: "3"
 
 services:
+  masterNode:
+    image: kadlab:latest 
+    stdin_open: true
+    tty: true
+    environment:
+      - master=true  
+    networks:
+      kademlia_network:
+        ipv4_address: 10.10.0.10
+
+        
   kademliaNodes:
     image: kadlab:latest # Make sure your Docker image has this name.
     stdin_open: true
@@ -27,15 +38,7 @@ services:
     networks:
       - kademlia_network
 
-  masterNode:
-    image: kadlab:latest 
-    stdin_open: true
-    tty: true
-    environment:
-      - master=true  
-    networks:
-      kademlia_network:
-        ipv4_address: 10.10.0.10
+  
         
 networks:
   kademlia_network:

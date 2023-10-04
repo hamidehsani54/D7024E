@@ -2,10 +2,10 @@ package main
 
 import (
     "D7024E/logic"
-    "os"
-    "time"
     "fmt"
     "net"
+    "os"
+    "time"
 )
 
 func main() {
@@ -15,11 +15,13 @@ func main() {
     // Retrieve the  IP
     ip, err := getContainerIP()
     if err != nil {
-        panic(err) 
+        panic(err)
     }
-
+    fmt.Println("ip:", ip)
     // Generate the KademliaID based on role
     var nodeID *logic.KademliaID
+
+    //kademliaInstance := logic.InitKademlia(netInstance)
     if role == "true" {
         fmt.Println("I am master")
         nodeID = logic.NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51")
@@ -27,41 +29,29 @@ func main() {
         fmt.Println("I am NOT master")
         nodeID = logic.NewRandomKademliaID()
     }
-
+    fmt.Println("Node ID:", nodeID)
     port := 4000
 
     // Initialize the network with the node's ID and IP
     netInstance := logic.InitNetwork(nodeID, ip)
-
     // Start listening for incoming messages
     go netInstance.Listen(ip, port)
-    
     // If the node is not a master, it should join the network
-    /*
+    
+
     if role != "true" {
-         // Assuming a function to initialize Kademlia
-        
+        // Assuming a function to initialize Kademlia
+        //time.Sleep(60 * time.Second)
+        contact := logic.NewContact(logic.NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51"), "masterNode")
+        netInstance.SendPingMessage(&contact)
+        //time.Sleep(60 * time.Second)
+		kademliaInstance := logic.InitKademlia(netInstance)
         kademliaInstance.JoinNetwork()
     }
-    */
 
-    // For demonstration, continuously send pings to the master node
-    /*targetIP := "10.10.0.10"  // Assuming this is the master node or bootstrap node
-    message := logic.PingMessage{
-        Type:       "ping",
-        KademliaID: nodeID.String(),
-        IP:         ip,
-    }*/
-    
-    contact := logic.NewContact(logic.NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51"), "10.10.0.10")
     for {
-        //fmt.Println(contact.String())
-        netInstance.SendPingMessage(&contact)
-        time.Sleep(1 * time.Second)
-        //fmt.Println("Yoo my man", netInstance.SendFindContactMessage(&contact, logic.NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51")))
-        
+        time.Sleep(time.Hour)
     }
-    
 }
 
 // Function to get the container IP address

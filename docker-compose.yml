@@ -14,13 +14,9 @@ services:
     tty: true
     environment:
       - master=true  
-    networks:
-      kademlia_network:
-        ipv4_address: 10.10.0.10
-
         
   kademliaNodes:
-    image: kadlab:latest # Make sure your Docker image has this name.
+    image: kadlab:latest
     stdin_open: true
     tty: true
     deploy:
@@ -35,8 +31,6 @@ services:
         delay: 5s
         max_attempts: 3
         window: 10s
-    networks:
-      - kademlia_network
 
   
         

@@ -1,87 +1,89 @@
 package logic
 
 import (
-    "net"
-    "fmt"
-    "log"
-    //"strings"
-    "encoding/json"
-    "time"
+	"fmt"
+	"log"
+	"net"
+
+	//"strings"
+	"encoding/json"
+	"time"
 )
 
 type Network struct {
-    Node *Contact
-	rt *RoutingTable
+	Node *Contact
+	rt   *RoutingTable
+	kademlia *Kademlia
 }
 
 func InitNetwork(id *KademliaID, address string) *Network {
-    node := &Contact{
-        ID:      id,
-        Address: address,
-    }
-    
-    return &Network{
-        Node: node,
-        rt: NewRoutingTable(*node),
-    }
+	node := &Contact{
+		ID:      id,
+		Address: address,
+	}
+
+	return &Network{
+		Node: node,
+		rt:   NewRoutingTable(*node),
+	}
 }
 
-
 type Message struct {
-    Type       string `json:"type"`
-    KademliaID string `json:"kademliaID"`
-    IP         string `json:"ip"`
-    target     *KademliaID
-    Contacts    []Contact
+	Type       string `json:"type"`
+	KademliaID string `json:"kademliaID"`
+	IP         string `json:"ip"`
+	Target     string `json:"target"`
+	Contacts   []Contact
+	Data 	   []byte
 }
 
 func (network *Network) Listen(ip string, port int) {
-    // TODO
-    addr := fmt.Sprintf("%s:%d", ip, port)
-    udpAddr, err := net.ResolveUDPAddr("udp", addr)
-    listener, err := net.ListenUDP("udp", udpAddr)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer listener.Close()
-    fmt.Printf("Listening on %s...\n", udpAddr.String())
+	// TODO
+	addr := fmt.Sprintf("%s:%d", ip, port)
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	listener, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer listener.Close()
+	fmt.Printf("Listening on %s...\n", udpAddr.String())
 
-    buffer := make([]byte, 4096)
-    for{
-        n, addr, err := listener.ReadFromUDP(buffer)
-        if err != nil{
-            log.Print(err)
-            continue
-        }
-        receivedData := string(buffer[:n])
-        handleInput(buffer[:n],addr, network)
-        log.Printf("Received data from %s: %s\n", addr, receivedData)
-    }
+	buffer := make([]byte, 4096)
+	for {
+		n, addr, err := listener.ReadFromUDP(buffer)
+		if err != nil {
+			log.Print(err)
+			continue
+		}
+		receivedData := string(buffer[:n])
+		network.handleInput(buffer[:n], addr)
+		log.Printf("Received data from %s: %s\n", addr, receivedData)
+	}
 }
 
 func SendDial(targetIp string, message *Message) Message {
-    err_message := Message{
-        Type:       "error",
-    }
-    addr := fmt.Sprintf("%s:%d", targetIp, 4000)
-    conn, err := net.Dial("udp", addr)
-    if err != nil{
-        log.Fatal(err)
-    }
-    defer conn.Close()
+	err_message := Message{
+		Type: "error",
+	}
+	addr := fmt.Sprintf("%s:%d", targetIp, 4000)
+	conn, err := net.Dial("udp", addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
 
-    msgBytes, err := json.Marshal(message)
-    if err != nil {
-        log.Println("Error marshalling message:", err)
-        return err_message
-    }
-    _, err = conn.Write(msgBytes)
-    if err != nil {
-        fmt.Println("Writing error: ", err, " in sendMsg")
-        return err_message
-    }
+	msgBytes, err := json.Marshal(message)
+	if err != nil {
+		log.Println("Error marshalling message:", err)
+		return err_message
+	}
+	_, err = conn.Write(msgBytes)
+	if err != nil {
+		fmt.Println("Writing error: ", err, " in sendMsg")
+		return err_message
+	}
 
-    buffer := make([]byte, 4096)
+	buffer := make([]byte, 4096)
 	setReadDeadlineError := conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	if setReadDeadlineError != nil {
 		return err_message
@@ -91,100 +93,130 @@ func SendDial(targetIp string, message *Message) Message {
 		return err_message
 	}
 
-    var pingMsg Message
-    err2 := json.Unmarshal(buffer[:end], &pingMsg)
-    if err2 != nil {
-        log.Println("Error unmarshalling received message:", err)
-        return err_message
-    }
+	var pingMsg Message
+	err2 := json.Unmarshal(buffer[:end], &pingMsg)
+	if err2 != nil {
+		log.Println("Error unmarshalling received message:", err)
+		return err_message
+	}
 	return pingMsg
 }
 
-func (network *Network) SendPingMessage(contact *Contact) {
-    message := Message{
-        Type:       "ping",
-        KademliaID: network.Node.ID.String(),
-        IP:         network.Node.Address,
-    }
-    
-    SendDial(contact.Address ,&message)
+func (network *Network) SendPingMessage(contact *Contact) Message{
+	fmt.Println("SendPingMessage")
+	message := Message{
+		Type:       "ping",
+		KademliaID: network.Node.ID.String(),
+		IP:         network.Node.Address,
+	}
+
+	return SendDial(contact.Address, &message)
 }
 
+func (network *Network) SendFindContactMessage(contact *Contact, t string) Message {
+	fmt.Println("SendFindContactMessage")
+	message := Message{
+		Type:       "FindContact",
+		KademliaID: network.Node.ID.String(),
+		IP:         network.Node.Address,
+		Target:     t,
+	}
 
-
-func (network *Network) SendFindContactMessage(contact *Contact, t *KademliaID) Message {
-    fmt.Println("printing contacts", contact.Address)
-    message := Message{
-        Type:       "FindContact",
-        KademliaID: network.Node.ID.String(),
-        IP:         network.Node.Address,
-        target:     t,
-    }
-    
-    return SendDial(contact.Address ,&message)
+	fmt.Println("this is the address: ", contact.Address)
+	return SendDial(contact.Address, &message)
 }
 
 func (network *Network) SendFindDataMessage(hash string) {
-    // TODO
+	fmt.Println("SendFindDataMessage")
+	
+	// TODO
 }
 
-func (network *Network) SendStoreMessage(data []byte) {
-    // TODO
+func (network *Network) SendStoreMessage(contact *Contact, data []byte) Message{
+	fmt.Println("SendStoreMessage")
+	sendMsg := &Message{
+		Type:       "StoreMessage",
+		KademliaID: network.Node.ID.String(),
+		IP:         network.Node.Address, 
+		Data: 		data,
+	}
+
+	return SendDial(contact.Address, sendMsg)
 }
 
-func handleInput(message []byte, addr *net.UDPAddr, network *Network){
-    var pingMsg Message
-    err := json.Unmarshal(message, &pingMsg)
-    if err != nil {
-        log.Println("Error unmarshalling received message:", err)
-        return
-    }
-    // Now you can use pingMsg.Type, pingMsg.KademliaID, etc.
-  
-    switch{
-        case pingMsg.Type == "ping":
-            handlePing(pingMsg, addr, network)
-        case pingMsg.Type == "pong":
-            handlePong(pingMsg)
-        case pingMsg.Type == "FindContact":
-            fmt.Println("Tst: ")
-            handleFindContact(pingMsg, network)
-        case pingMsg.Type == "err":
-            fmt.Println("Error in error")
-    }
+func (network *Network) handleStoreMessage(message Message) {
+	fmt.Println("handleStoreMessage")
+	// TODO
+	//Send data to target
+	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
+	network.rt.AddContact(senderContact)
 }
 
-func handlePing(message Message, addr *net.UDPAddr, network *Network) Message{
-    //Respnse to sender
-    fmt.Println("Ping from: ", message)
+func (network *Network) handleInput(message []byte, addr *net.UDPAddr) {
+	var pingMsg Message
+	err := json.Unmarshal(message, &pingMsg)
+	if err != nil {
+		log.Println("Error unmarshalling received message:", err)
+		return
+	}
+	// Now you can use pingMsg.Type, pingMsg.KademliaID, etc.
+
+	switch {
+	case pingMsg.Type == "ping":
+		network.handlePing(pingMsg, addr)
+	case pingMsg.Type == "pong":
+		handlePong(pingMsg)
+	case pingMsg.Type == "FindContact":
+		fmt.Println("Tst: ")
+		fmt.Println(pingMsg.Target)
+		fmt.Println("pingMsg: ", pingMsg)
+		network.handleFindContact(pingMsg)
+	case pingMsg.Type == "StoreMessage":
+		fmt.Println("Tst222: ")
+		network.handleStoreMessage(pingMsg)
+	case pingMsg.Type == "err":
+		fmt.Println("Error in error")
+	}
+}
+
+func (network *Network) handlePing(message Message, addr *net.UDPAddr) Message {
+	fmt.Println("handlePing")
+	//Respnse to sender
+	fmt.Println("Ping from: ", message)
 
 	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
-    network.rt.AddContact(senderContact) 
+	network.rt.AddContact(senderContact)
 
 	sendMsg := &Message{
-        Type: "pong",
-        KademliaID: network.Node.ID.String(),
-        IP: network.Node.Address,//
-    }
-    return SendDial(message.IP, sendMsg)
+		Type:       "pong",
+		KademliaID: network.Node.ID.String(),
+		IP:         network.Node.Address, //
+	}
+	return SendDial(message.IP, sendMsg)
 }
 
-
-func handlePong(message Message){
-    fmt.Println("Pong from: ", message)
+func handlePong(message Message) {
+	fmt.Println("Pong from: ", message)
 }
 
+func (network *Network) handleFindContact(message Message) Message {
+	fmt.Println("handleFindContact")
+	var K = 10
+	fmt.Println("Target ", message.Target)
+	fmt.Println("Xasd: ", message)
+	contacts := network.rt.FindClosestContacts(NewKademliaID(message.Target), K)
+	//self := network.rt.FindClosestContacts(network.Node.ID, K)
+	
+	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
+	network.rt.AddContact(senderContact)
 
-func handleFindContact(message Message, network *Network) Message{
-    var K = 10
-    contacts := network.rt.FindClosestContacts(message.target, K)
+	//fmt.Println("This is the self printout: \n", self)
+	sendContacts := &Message{
+		Type:       "ReturnContact",
+		KademliaID: network.Node.ID.String(),
+		IP:         network.Node.Address,
+		Contacts:   contacts,
+	}
 
-    sendContacts:= &Message{
-        Type:       "ReturnContact",
-        KademliaID: network.Node.ID.String(),
-        IP:         network.Node.Address,
-        Contacts: contacts,
-    }
-
-    return SendDial(message.IP, sendContacts)
+	return SendDial(message.IP, sendContacts)
 }

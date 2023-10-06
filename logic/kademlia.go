@@ -14,8 +14,8 @@ type Kademlia struct {
 }
 
 type DataStore struct {
-    data string
-    hash string
+    Data []byte
+    Hash string
 }
 
 type allContacts struct {
@@ -113,7 +113,7 @@ func (kademlia *Kademlia) queryNodeForClosestContacts(contact Contact, target st
 
     //self := kademlia.Network.rt.FindClosestContacts(target, 10)
     //print("Self print: ", self)
-    print("\n Others print: ", c.Contacts)
+    println("\n Others print: ", c.Contacts, " ", c.KademliaID)
     ch <- c.Contacts
 }
 
@@ -141,11 +141,34 @@ func (s *allContacts) Add(contact Contact, target *KademliaID) {
     s.Contacts[position] = contact
 }
 
-func (kademlia *Kademlia) LookupData(hash string) {
-	// TODO
+func (kademlia *Kademlia) LookupData(hash string) ([]byte, []Contact){
+    // Find the closest contacts to the target hash
+    closestContacts := kademlia.LookupContact(NewKademliaID(hash))
+
+    for _, contact := range closestContacts {
+        // Ask the contact for the data associated with the hash
+        data := kademlia.Network.SendFindDataMessage(&contact, hash)
+        if data.Data != nil{
+            return data.Data, nil
+        }
+    }
+
+    // If we've checked all closest nodes and didn't find the data, return an error
+    return nil, closestContacts
 }
 
+func (kademlia *Kademlia) FindLocalData(hash string) (string, []byte) {
+    for _, datastore := range kademlia.DataList {
+        if datastore.Hash == hash {
+            return datastore.Hash, datastore.Data
+        }
+    }
+    return "Error", nil
+}
+
+
 func (kademlia *Kademlia) Store(data []byte) {
+    println("Store is : ", string(data))
     // Compute the hash of the data
     hash := sha1.Sum(data)
     hashString := hex.EncodeToString(hash[:])
@@ -166,8 +189,8 @@ func (kademlia *Kademlia) addData(data []byte){
     hashString := hex.EncodeToString(hash[:])
 
     dataStore := DataStore{
-        data: string(data),
-        hash: hashString,
+        Data: data,
+        Hash: hashString,
     }
 
     kademlia.DataList = append(kademlia.DataList, dataStore)

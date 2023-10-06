@@ -38,7 +38,7 @@ func main() {
     go netInstance.Listen(ip, port)
     // If the node is not a master, it should join the network
     
-
+    
     if role != "true" {
         // Assuming a function to initialize Kademlia
         //time.Sleep(60 * time.Second)
@@ -46,7 +46,12 @@ func main() {
         netInstance.SendPingMessage(&contact)
         //time.Sleep(60 * time.Second)
 		kademliaInstance := logic.InitKademlia(netInstance)
+
+        netInstance.Kademlia = kademliaInstance
         kademliaInstance.JoinNetwork()
+
+        time.Sleep(60 * time.Second)
+        kademliaInstance.Store([]byte("test"))
     }
 
     for {

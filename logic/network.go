@@ -13,7 +13,7 @@ import (
 type Network struct {
 	Node *Contact
 	rt   *RoutingTable
-	kademlia *Kademlia
+	Kademlia *Kademlia
 }
 
 func InitNetwork(id *KademliaID, address string) *Network {
@@ -35,6 +35,7 @@ type Message struct {
 	Target     string `json:"target"`
 	Contacts   []Contact
 	Data 	   []byte
+	Key		   string `json:"Key"`
 }
 
 func (network *Network) Listen(ip string, port int) {
@@ -123,17 +124,49 @@ func (network *Network) SendFindContactMessage(contact *Contact, t string) Messa
 	}
 
 	fmt.Println("this is the address: ", contact.Address)
+	
 	return SendDial(contact.Address, &message)
 }
 
-func (network *Network) SendFindDataMessage(hash string) {
+func (network *Network) SendFindDataMessage(contact *Contact, hash string) Message{
 	fmt.Println("SendFindDataMessage")
 	
+	sendMsg := &Message{
+		Type:       "SendFindMessage",
+		KademliaID: network.Node.ID.String(),
+		IP:         network.Node.Address, 
+		Key: 		hash,
+	}
+
+	return SendDial(contact.Address, sendMsg)
+}
+
+func (network *Network) handleFindDataMessage(message Message) Message {
+	fmt.Println("handleStoreMessage")
+	hash, data := network.Kademlia.FindLocalData(message.Key)
 	// TODO
+	//Send data to target
+	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
+	network.rt.AddContact(senderContact)
+	var sendData []byte
+	if message.Key == hash {
+		sendData = data
+	}else {
+		sendData = nil
+	}
+	sendMsg := &Message{
+		Type:       "SendDataMessage",
+		KademliaID: network.Node.ID.String(),
+		IP:         network.Node.Address, 
+		Data: 		sendData,
+	}
+
+	return SendDial(message.IP, sendMsg)
 }
 
 func (network *Network) SendStoreMessage(contact *Contact, data []byte) Message{
-	fmt.Println("SendStoreMessage")
+	fmt.Println("SendStoreMessage: ", string(data))
+	
 	sendMsg := &Message{
 		Type:       "StoreMessage",
 		KademliaID: network.Node.ID.String(),
@@ -145,9 +178,11 @@ func (network *Network) SendStoreMessage(contact *Contact, data []byte) Message{
 }
 
 func (network *Network) handleStoreMessage(message Message) {
-	fmt.Println("handleStoreMessage")
+	fmt.Println("handleStoreMessage: ", string(message.Data))
 	// TODO
 	//Send data to target
+	network.Kademlia.addData(message.Data)
+	fmt.Println("handleStore2")
 	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
 	network.rt.AddContact(senderContact)
 }
@@ -174,6 +209,8 @@ func (network *Network) handleInput(message []byte, addr *net.UDPAddr) {
 	case pingMsg.Type == "StoreMessage":
 		fmt.Println("Tst222: ")
 		network.handleStoreMessage(pingMsg)
+	case pingMsg.Type == "SendDataMessage":
+		network.handleFindDataMessage(pingMsg)
 	case pingMsg.Type == "err":
 		fmt.Println("Error in error")
 	}

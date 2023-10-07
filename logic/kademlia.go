@@ -6,6 +6,7 @@ import (
   "sync"
   "crypto/sha1"
   "encoding/hex"
+  "strings"
 )
 
 type Kademlia struct {
@@ -186,6 +187,8 @@ func (kademlia *Kademlia) Store(data []byte) {
 
 func (kademlia *Kademlia) addData(data []byte){
     hash := sha1.Sum(data)
+
+    println("Data: ", string(data) , " Hash: ", string(hash[:]))
     hashString := hex.EncodeToString(hash[:])
 
     dataStore := DataStore{
@@ -194,4 +197,17 @@ func (kademlia *Kademlia) addData(data []byte){
     }
 
     kademlia.DataList = append(kademlia.DataList, dataStore)
+}
+
+func (kademlia *Kademlia) PrintData() string {
+    var result strings.Builder
+    result.WriteString("Stored Data:\n")
+
+    for i, dataStore := range kademlia.DataList {
+        result.WriteString(fmt.Sprintf("Item %d:\n", i+1))
+        result.WriteString(fmt.Sprintf("  Hash: %s\n", dataStore.Hash))
+        result.WriteString(fmt.Sprintf("  Data: %s\n", string(dataStore.Data)))
+    }
+
+    return result.String()
 }

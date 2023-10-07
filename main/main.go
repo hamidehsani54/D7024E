@@ -18,10 +18,9 @@ func main() {
         panic(err)
     }
     fmt.Println("ip:", ip)
+    
     // Generate the KademliaID based on role
     var nodeID *logic.KademliaID
-
-    //kademliaInstance := logic.InitKademlia(netInstance)
     if role == "true" {
         fmt.Println("I am master")
         nodeID = logic.NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51")
@@ -34,26 +33,21 @@ func main() {
 
     // Initialize the network with the node's ID and IP
     netInstance := logic.InitNetwork(nodeID, ip)
+    
     // Start listening for incoming messages
     go netInstance.Listen(ip, port)
-    // If the node is not a master, it should join the network
-    
     
     if role != "true" {
-        // Assuming a function to initialize Kademlia
-        //time.Sleep(60 * time.Second)
         contact := logic.NewContact(logic.NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51"), "masterNode")
         netInstance.SendPingMessage(&contact)
-        //time.Sleep(60 * time.Second)
-		kademliaInstance := logic.InitKademlia(netInstance)
-
-        netInstance.Kademlia = kademliaInstance
-        kademliaInstance.JoinNetwork()
-
+        
+        netInstance.Kademlia.JoinNetwork()
         time.Sleep(60 * time.Second)
-        kademliaInstance.Store([]byte("test"))
+        netInstance.Kademlia.Store([]byte("test"))
+        time.Sleep(20 * time.Second)
+        fmt.Println("QQQCXXXX", netInstance.Kademlia.PrintData())
     }
-
+    
     for {
         time.Sleep(time.Hour)
     }

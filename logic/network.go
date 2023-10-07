@@ -22,10 +22,18 @@ func InitNetwork(id *KademliaID, address string) *Network {
 		Address: address,
 	}
 
-	return &Network{
+	net :=  &Network{
 		Node: node,
 		rt:   NewRoutingTable(*node),
 	}
+
+	net.Kademlia = &Kademlia{
+        Network: net,
+        // Initialize other necessary fields for Kademlia, e.g., DataList
+        DataList: make([]DataStore, 0),
+    }
+	
+	return net
 }
 
 type Message struct {
@@ -178,7 +186,7 @@ func (network *Network) SendStoreMessage(contact *Contact, data []byte) Message{
 }
 
 func (network *Network) handleStoreMessage(message Message) {
-	fmt.Println("handleStoreMessage: ", string(message.Data))
+	fmt.Println("handleStoreMessage: ", message.Data, " ", string(message.Data))
 	// TODO
 	//Send data to target
 	network.Kademlia.addData(message.Data)

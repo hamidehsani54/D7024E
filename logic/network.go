@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net"
-
+	"crypto/sha1"
+	"encoding/hex"
 	//"strings"
 	"encoding/json"
 	"time"
@@ -15,7 +16,8 @@ type Network struct {
 	rt                  *RoutingTable
 	Kademlia            *Kademlia
 	pendingRequests     map[string]chan []Contact
-	pendingDataRequests map[string]chan []byte
+	pendingDataRequests map[string]chan Message
+	pendingStoreRequests map[string]chan []byte
 }
 
 func InitNetwork(id *KademliaID, address string) *Network {
@@ -28,6 +30,8 @@ func InitNetwork(id *KademliaID, address string) *Network {
 		Node:            node,
 		rt:              NewRoutingTable(*node),
 		pendingRequests: make(map[string]chan []Contact), // Initialize the map here
+		pendingDataRequests: make(map[string]chan Message),
+		pendingStoreRequests: make(map[string]chan []byte),
 	}
 
 	net.Kademlia = &Kademlia{
@@ -47,6 +51,7 @@ type Message struct {
 	Data       []byte
 	Key        string `json:"Key"`
 	RequestID  string `json:"requestID"`
+	//Success    bool `json:"Success"`
 }
 
 const (
@@ -128,6 +133,8 @@ func (network *Network) handleInput(message []byte, addr *net.UDPAddr) {
 		network.handleFindDataMessage(receivedMessage)
 	case "SendDataResponse":
 		network.handleDataResponse(receivedMessage)
+	case "SendStoreResponse":
+		network.handleStoreResponse(receivedMessage)
 	case "err":
 		log.Println("Received error message")
 	default:
@@ -229,15 +236,15 @@ func (network *Network) handleFindContactResponse(message Message) {
 	close(ch)
 }
 
-func (network *Network) SendFindDataMessage(contact *Contact, hash string) (chan []byte, error) {
+func (network *Network) SendFindDataMessage(contact *Contact, hash string) (chan Message, error) {
 	fmt.Println("Requesting Data...")
 
 	requestID := generateUniqueRequestID()
-	ch := make(chan []byte)
+	ch := make(chan Message)
 	network.pendingDataRequests[requestID] = ch
 
 	sendMsg := &Message{
-		Type:       "FindDataRequest",
+		Type:       "SendDataMessage",
 		KademliaID: network.Node.ID.String(),
 		IP:         network.Node.Address,
 		Key:        hash,
@@ -283,23 +290,33 @@ func (network *Network) handleDataResponse(message Message) {
 		return
 	}
 
-	ch <- message.Data
+	ch <- message
 	close(ch)
 	delete(network.pendingDataRequests, message.RequestID)
 }
 
-func (network *Network) SendStoreMessage(contact *Contact, data []byte) error {
+func (network *Network) SendStoreMessage(contact *Contact, data []byte) (chan []byte, error) {
 	fmt.Println("SendStoreMessage: ", string(data))
+	requestID := generateUniqueRequestID() // You'd need to implement this function
+
+	ch := make(chan []byte)
+	network.pendingStoreRequests[requestID] = ch 
 
 	sendMsg := &Message{
 		Type:       "StoreMessage",
 		KademliaID: network.Node.ID.String(),
 		IP:         network.Node.Address,
 		Data:       data,
-		RequestID:  generateUniqueRequestID(),
+		RequestID:  requestID,
 	}
 
-	return SendDial(contact.Address, sendMsg)
+	err := SendDial(contact.Address, sendMsg)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return ch, nil
 }
 
 func (network *Network) handleStoreMessage(message Message) {
@@ -307,9 +324,35 @@ func (network *Network) handleStoreMessage(message Message) {
 	// TODO
 	//Send data to target
 	network.Kademlia.addData(message.Data)
-	fmt.Println("handleStore2")
 	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
 	network.rt.AddContact(senderContact)
+
+	hash := sha1.Sum(message.Data)
+	hashString := hex.EncodeToString(hash[:])
+
+	sendMsg := &Message{
+		Type:       "SendStoreResponse",
+		KademliaID: network.Node.ID.String(),
+		IP:         network.Node.Address,
+		Data: 		[]byte(hashString),
+		RequestID:  message.RequestID,
+	}
+
+	SendDial(message.IP, sendMsg)
+}
+
+func (network *Network) handleStoreResponse(message Message){
+	fmt.Println("Handling Store Response...")
+
+	ch, exists := network.pendingStoreRequests[message.RequestID]
+	if !exists {
+		log.Printf("Unknown request ID: %s", message.RequestID)
+		return
+	}
+
+	ch <- message.Data
+	close(ch)
+	delete(network.pendingDataRequests, message.RequestID)
 }
 
 func handlePong(message Message) {

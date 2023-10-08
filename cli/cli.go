@@ -28,6 +28,7 @@ func (c *CLI) AddCommand(name string, handler func([]string)) {
 
 // Start initiates the CLI and enters a loop to process user input.
 func (c *CLI) Start() {
+    fmt.Println("Type 'help' for a list of available commands.")
     reader := bufio.NewReader(os.Stdin)
 
     for {
@@ -45,6 +46,8 @@ func (c *CLI) Start() {
 
         if command == "exit" {
             if c.confirmExit() {  // Check if the user wants to exit and confirm.
+                fmt.Println("Terminating the node...")
+                os.Exit(0)
                 return
             }
         } else {

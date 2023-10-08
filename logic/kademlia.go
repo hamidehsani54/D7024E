@@ -150,12 +150,16 @@ func (s *allContacts) Add(contact Contact, target *KademliaID) {
 	s.Contacts[position] = contact
 }
 
-func (kademlia *Kademlia) LookupData(hash string) ([]byte, []Contact) {
+func (kademlia *Kademlia) LookupData(hash string) (string, string, []Contact) {
 	// Find the closest contacts to the target hash
 	closestContacts := kademlia.LookupContact(NewKademliaID(hash))
 
 	// Create a channel to receive the responses
-	responseCh := make(chan []byte, len(closestContacts))
+	responseCh := make(chan Message, len(closestContacts))
+	errorMsg := &Message{
+		Type:       "Error",
+		Data: 		[]byte("Error in request"),
+	}
 
 	// Use a WaitGroup to wait for all queries to complete
 	var wg sync.WaitGroup
@@ -169,7 +173,7 @@ func (kademlia *Kademlia) LookupData(hash string) ([]byte, []Contact) {
 			dataCh, err := kademlia.Network.SendFindDataMessage(&contact, hash)
 			if err != nil {
 				log.Printf("Failed to send find data message to %s: %v", contact.Address, err)
-				responseCh <- nil
+				responseCh <- *errorMsg
 				return
 			}
 
@@ -179,7 +183,7 @@ func (kademlia *Kademlia) LookupData(hash string) ([]byte, []Contact) {
 				responseCh <- data
 			case <-time.After(10 * time.Second): // Adjust the timeout as needed
 				log.Printf("Timed out waiting for data response from %s", contact.Address)
-				responseCh <- nil
+				responseCh <- *errorMsg
 			}
 		}(contact)
 	}
@@ -190,13 +194,13 @@ func (kademlia *Kademlia) LookupData(hash string) ([]byte, []Contact) {
 
 	// Process the responses
 	for data := range responseCh {
-		if data != nil {
-			return data, nil
+		if data.Type != "Error"{
+			return string(data.Data), string(data.KademliaID), nil
 		}
 	}
 
 	// If we've checked all closest nodes and didn't find the data, return the closest contacts
-	return nil, closestContacts
+	return "Could not find data", " ", closestContacts
 }
 
 func (kademlia *Kademlia) FindLocalData(hash string) (string, []byte) {
@@ -208,21 +212,41 @@ func (kademlia *Kademlia) FindLocalData(hash string) (string, []byte) {
 	return "Error", nil
 }
 
-func (kademlia *Kademlia) Store(data []byte) {
+func (kademlia *Kademlia) Store(data []byte) string{
 	println("Store is : ", string(data))
 	// Compute the hash of the data
 	hash := sha1.Sum(data)
 	hashString := hex.EncodeToString(hash[:])
 	dataTarget := kademlia.LookupContact(NewKademliaID(hashString))
 
+	responseCh := make(chan []byte, len(dataTarget))
+	
 	//dataTarget = dataTarget[:10]
-
-	for _, contact := range dataTarget {
+	for _, contact := range dataTarget {	
 		if kademlia.Network.Node.ID == contact.ID {
 			kademlia.addData(data)
 		}
-		kademlia.Network.SendStoreMessage(&contact, data)
+		dataCh, err := kademlia.Network.SendStoreMessage(&contact, data)
+		if err != nil {
+			log.Printf("Failed to send find data message to %s: %v", contact.Address, err)
+			responseCh <- nil
+			return "Failed to store data"
+		}
+		select {
+		case data := <-dataCh:
+			responseCh <- data
+		case <-time.After(10 * time.Second): // Adjust the timeout as needed
+			log.Printf("Timed out waiting for data response from %s", contact.Address)
+			responseCh <- nil
+		}
 	}
+
+	for data := range responseCh {
+		if data != nil {
+			return hashString
+		}
+	}
+	return "Failed to return data"
 }
 
 func (kademlia *Kademlia) addData(data []byte) {

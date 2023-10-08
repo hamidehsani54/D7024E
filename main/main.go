@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 	"strings"
+	//"crypto/sha1"
+	//"encoding/hex"
 )
 
 func main() {
@@ -98,12 +100,23 @@ func startCLI(exitCh chan struct{}, network *logic.Network) {
 	
 		// Convert the first argument to a byte slice and pass to Store
 		dataToStore := strings.Join(args, " ")  // Join with spaces
-		network.Kademlia.Store([]byte(dataToStore))
+		
+		fmt.Println("The hash: ", network.Kademlia.Store([]byte(dataToStore)))
 	})
 	
     myCLI.AddCommand("get", func(args []string) {
         // Handle 'get' command
-        fmt.Println("Executing 'get' command with args:", args)
+		fmt.Println("Executing 'get' command with args:", args)
+		data := strings.Join(args, " ")
+
+
+		var t1, t2 string
+		var contacts []logic.Contact
+		t1, t2, contacts = network.Kademlia.LookupData(data)
+
+		fmt.Println("The data: ", t1, " From Node: ", t2, " Contacts: ", contacts)
+
+		
     })
 
 	myCLI.AddCommand("print", func(args []string) {
@@ -115,13 +128,6 @@ func startCLI(exitCh chan struct{}, network *logic.Network) {
     myCLI.AddCommand("help", func(args []string) {
         // Handle 'help' command
         fmt.Println("Available commands: put, get, exit")
-    })
-
-    // Add an exit command to gracefully exit the CLI and terminate the node
-    myCLI.AddCommand("exit", func(args []string) {
-        fmt.Println("Terminating the node...")
-        // Send a signal to the network Goroutine to exit
-        close(exitCh)
     })
 
     myCLI.Start()

@@ -157,8 +157,8 @@ func (kademlia *Kademlia) LookupData(hash string) (string, string, []Contact) {
 	// Create a channel to receive the responses
 	responseCh := make(chan Message, len(closestContacts))
 	errorMsg := &Message{
-		Type:       "Error",
-		Data: 		[]byte("Error in request"),
+		Type: "Error",
+		Data: []byte("Error in request"),
 	}
 
 	// Use a WaitGroup to wait for all queries to complete
@@ -194,7 +194,7 @@ func (kademlia *Kademlia) LookupData(hash string) (string, string, []Contact) {
 
 	// Process the responses
 	for data := range responseCh {
-		if data.Type != "Error"{
+		if data.Type != "Error" {
 			return string(data.Data), string(data.KademliaID), nil
 		}
 	}
@@ -212,7 +212,7 @@ func (kademlia *Kademlia) FindLocalData(hash string) (string, []byte) {
 	return "Error", nil
 }
 
-func (kademlia *Kademlia) Store(data []byte) string{
+func (kademlia *Kademlia) Store(data []byte) string {
 	println("Store is : ", string(data))
 	// Compute the hash of the data
 	hash := sha1.Sum(data)
@@ -220,9 +220,9 @@ func (kademlia *Kademlia) Store(data []byte) string{
 	dataTarget := kademlia.LookupContact(NewKademliaID(hashString))
 
 	responseCh := make(chan []byte, len(dataTarget))
-	
+
 	//dataTarget = dataTarget[:10]
-	for _, contact := range dataTarget {	
+	for _, contact := range dataTarget {
 		if kademlia.Network.Node.ID == contact.ID {
 			kademlia.addData(data)
 		}

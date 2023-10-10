@@ -1,22 +1,23 @@
 package logic
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
-	"crypto/sha1"
-	"encoding/hex"
+
 	//"strings"
 	"encoding/json"
 	"time"
 )
 
 type Network struct {
-	Node                *Contact
-	rt                  *RoutingTable
-	Kademlia            *Kademlia
-	pendingRequests     map[string]chan []Contact
-	pendingDataRequests map[string]chan Message
+	Node                 *Contact
+	rt                   *RoutingTable
+	Kademlia             *Kademlia
+	pendingRequests      map[string]chan []Contact
+	pendingDataRequests  map[string]chan Message
 	pendingStoreRequests map[string]chan []byte
 }
 
@@ -27,10 +28,10 @@ func InitNetwork(id *KademliaID, address string) *Network {
 	}
 
 	net := &Network{
-		Node:            node,
-		rt:              NewRoutingTable(*node),
-		pendingRequests: make(map[string]chan []Contact), // Initialize the map here
-		pendingDataRequests: make(map[string]chan Message),
+		Node:                 node,
+		rt:                   NewRoutingTable(*node),
+		pendingRequests:      make(map[string]chan []Contact), // Initialize the map here
+		pendingDataRequests:  make(map[string]chan Message),
 		pendingStoreRequests: make(map[string]chan []byte),
 	}
 
@@ -51,7 +52,6 @@ type Message struct {
 	Data       []byte
 	Key        string `json:"Key"`
 	RequestID  string `json:"requestID"`
-	//Success    bool `json:"Success"`
 }
 
 const (
@@ -77,14 +77,14 @@ func (network *Network) Listen(ip string, port int) error {
 
 	buffer := make([]byte, BufferSize)
 	for {
-		n, addr, err := listener.ReadFromUDP(buffer)
+		n, _, err := listener.ReadFromUDP(buffer)
 		if err != nil {
 			log.Print(err)
 			continue
 		}
-		receivedData := string(buffer[:n])
-		network.handleInput(buffer[:n], addr)
-		log.Printf("Received data from %s: %s\n", addr, receivedData)
+		//receivedData := string(buffer[:n])
+		network.handleInput(buffer[:n])
+		//log.Printf("Received data from %s: %s\n", addr, receivedData)
 	}
 }
 
@@ -109,7 +109,7 @@ func SendDial(targetIp string, message *Message) error {
 	return nil
 }
 
-func (network *Network) handleInput(message []byte, addr *net.UDPAddr) {
+func (network *Network) handleInput(message []byte) {
 	var receivedMessage Message
 	err := json.Unmarshal(message, &receivedMessage)
 	if err != nil {
@@ -120,9 +120,9 @@ func (network *Network) handleInput(message []byte, addr *net.UDPAddr) {
 
 	switch receivedMessage.Type {
 	case "ping":
-		network.handlePing(receivedMessage, addr)
+		network.handlePing(receivedMessage)
 	case "pong":
-		handlePong(receivedMessage)
+		network.handlePong(receivedMessage)
 	case "FindContact":
 		network.handleFindContact(receivedMessage)
 	case "FindContactResponse":
@@ -143,12 +143,12 @@ func (network *Network) handleInput(message []byte, addr *net.UDPAddr) {
 }
 
 func generateUniqueRequestID() string {
-	// For simplicity, using a timestamp. In a real-world scenario, you'd want a more sophisticated ID.
+	//time stamp uniqueid
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
 func (network *Network) SendPingMessage(contact *Contact) error {
-	fmt.Println("SendPingMessage")
+	//fmt.Println("SendPingMessage")
 	message := Message{
 		Type:       "ping",
 		KademliaID: network.Node.ID.String(),
@@ -159,10 +159,8 @@ func (network *Network) SendPingMessage(contact *Contact) error {
 	return SendDial(contact.Address, &message)
 }
 
-func (network *Network) handlePing(message Message, addr *net.UDPAddr) error {
-	fmt.Println("handlePing")
-	//Respnse to sender
-	fmt.Println("Ping from: ", message)
+func (network *Network) handlePing(message Message) error {
+	//fmt.Println("handlePing")
 
 	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
 	network.rt.AddContact(senderContact)
@@ -176,11 +174,9 @@ func (network *Network) handlePing(message Message, addr *net.UDPAddr) error {
 }
 
 func (network *Network) SendFindContactMessage(contact *Contact, target string) (chan []Contact, error) {
-	fmt.Println("SendFindContactMessage")
+	//fmt.Println("SendFindContactMessage")
 
-	// Generate a unique request ID. In this example, we'll use a simple counter,
-	// but in a real-world scenario, you might use a more sophisticated method.
-	requestID := generateUniqueRequestID() // You'd need to implement this function
+	requestID := generateUniqueRequestID()
 
 	ch := make(chan []Contact)
 	network.pendingRequests[requestID] = ch
@@ -202,7 +198,7 @@ func (network *Network) SendFindContactMessage(contact *Contact, target string) 
 }
 
 func (network *Network) handleFindContact(message Message) {
-	fmt.Println("Handling Find Contact Request...")
+	//fmt.Println("Handling Find Contact Request...")
 	targetID := NewKademliaID(message.Target)
 
 	contacts := network.rt.FindClosestContacts(targetID, 10)
@@ -221,23 +217,19 @@ func (network *Network) handleFindContact(message Message) {
 }
 
 func (network *Network) handleFindContactResponse(message Message) {
-	// Look up the channel based on the RequestID
 	ch, ok := network.pendingRequests[message.RequestID]
 	if !ok {
 		log.Printf("Unknown request ID: %s", message.RequestID)
 		return
 	}
-
-	// Send the contacts to the channel
 	ch <- message.Contacts
 
-	// Clean up: remove the entry from the map
 	delete(network.pendingRequests, message.RequestID)
 	close(ch)
 }
 
 func (network *Network) SendFindDataMessage(contact *Contact, hash string) (chan Message, error) {
-	fmt.Println("Requesting Data...")
+	//fmt.Println("Requesting Data...")
 
 	requestID := generateUniqueRequestID()
 	ch := make(chan Message)
@@ -260,7 +252,7 @@ func (network *Network) SendFindDataMessage(contact *Contact, hash string) (chan
 }
 
 func (network *Network) handleFindDataMessage(message Message) {
-	fmt.Println("Handling Data Request...")
+	//fmt.Println("Handling Data Request...")
 
 	// Look for the data based on the hash
 	hash, data := network.Kademlia.FindLocalData(message.Key)
@@ -282,7 +274,7 @@ func (network *Network) handleFindDataMessage(message Message) {
 }
 
 func (network *Network) handleDataResponse(message Message) {
-	fmt.Println("Handling Data Response...")
+	//fmt.Println("Handling Data Response...")
 
 	ch, exists := network.pendingDataRequests[message.RequestID]
 	if !exists {
@@ -296,11 +288,10 @@ func (network *Network) handleDataResponse(message Message) {
 }
 
 func (network *Network) SendStoreMessage(contact *Contact, data []byte) (chan []byte, error) {
-	fmt.Println("SendStoreMessage: ", string(data))
-	requestID := generateUniqueRequestID() // You'd need to implement this function
+	requestID := generateUniqueRequestID()
 
 	ch := make(chan []byte)
-	network.pendingStoreRequests[requestID] = ch 
+	network.pendingStoreRequests[requestID] = ch
 
 	sendMsg := &Message{
 		Type:       "StoreMessage",
@@ -320,9 +311,8 @@ func (network *Network) SendStoreMessage(contact *Contact, data []byte) (chan []
 }
 
 func (network *Network) handleStoreMessage(message Message) {
-	fmt.Println("handleStoreMessage: ", message.Data, " ", string(message.Data))
-	// TODO
-	//Send data to target
+	//fmt.Println("handleStoreMessage: ", message.Data, " ", string(message.Data))
+
 	network.Kademlia.addData(message.Data)
 	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
 	network.rt.AddContact(senderContact)
@@ -334,15 +324,15 @@ func (network *Network) handleStoreMessage(message Message) {
 		Type:       "SendStoreResponse",
 		KademliaID: network.Node.ID.String(),
 		IP:         network.Node.Address,
-		Data: 		[]byte(hashString),
+		Data:       []byte(hashString),
 		RequestID:  message.RequestID,
 	}
 
 	SendDial(message.IP, sendMsg)
 }
 
-func (network *Network) handleStoreResponse(message Message){
-	fmt.Println("Handling Store Response...")
+func (network *Network) handleStoreResponse(message Message) {
+	//fmt.Println("Handling Store Response...")
 
 	ch, exists := network.pendingStoreRequests[message.RequestID]
 	if !exists {
@@ -355,6 +345,8 @@ func (network *Network) handleStoreResponse(message Message){
 	delete(network.pendingDataRequests, message.RequestID)
 }
 
-func handlePong(message Message) {
-	fmt.Println("Pong from: ", message)
+func (network *Network) handlePong(message Message) {
+	//fmt.Println("Pong from: ", message)
+	senderContact := NewContact(NewKademliaID(message.KademliaID), message.IP)
+	network.rt.AddContact(senderContact)
 }

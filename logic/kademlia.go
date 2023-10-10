@@ -29,8 +29,6 @@ type allContacts struct {
 const alpha = 3
 
 func (kademlia *Kademlia) JoinNetwork() {
-
-	// Add master node to contacts, with the known values
 	kademlia.Network.rt.AddContact(NewContact(NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51"), "masterNode"))
 
 	contacts := kademlia.LookupContact(kademlia.Network.Node.ID)
@@ -39,14 +37,7 @@ func (kademlia *Kademlia) JoinNetwork() {
 	}
 }
 
-func InitKademlia(network *Network) *Kademlia {
-	return &Kademlia{
-		Network: network,
-	}
-}
-
 func (kademlia *Kademlia) LookupContact(target *KademliaID) []Contact {
-	fmt.Println("LookupContact-------", target)
 	contacts := kademlia.iterativeFindNode(target)
 	return contacts
 }
@@ -67,10 +58,8 @@ func (kademlia *Kademlia) iterativeFindNode(nodeID *KademliaID) []Contact {
 func (kademlia *Kademlia) lookupContactHelp(nodeID *KademliaID, earlierContacts []Contact, nodeList *allContacts) []Contact { // Added error return type
 	resultsChan := make(chan []Contact)
 	var wg sync.WaitGroup
-	fmt.Println("1")
 	for _, contact := range earlierContacts {
 		if _, found := nodeList.Seen[contact.ID.String()]; !found {
-			fmt.Println("2")
 			wg.Add(1)
 			nodeList.Seen[contact.ID.String()] = true
 			go kademlia.queryNodeForClosestContacts(contact, nodeID.String(), resultsChan, &wg)
@@ -120,48 +109,39 @@ func (kademlia *Kademlia) queryNodeForClosestContacts(contact Contact, target st
 
 	select {
 	case contacts := <-responseCh:
-		fmt.Println("\n Received contacts: ", contacts)
 		ch <- contacts
-	case <-time.After(20 * time.Second): // Wait for 20 seconds for a response
+	case <-time.After(20 * time.Second):
 		log.Printf("Timed out waiting for response from %s", contact.Address)
 	}
-	// Removed close(ch) since it should be closed only once after reading all responses
+
 }
 
 func (s *allContacts) Add(contact Contact, target *KademliaID) {
-	// Check if contact already exists
+
 	if _, found := s.Seen[contact.ID.String()]; found {
 		return
 	}
-
-	// Mark as seen
 	//s.Seen[contact.ID.String()] = true
 
 	contact.CalcDistance(target)
 
-	// Find the position to insert element
 	position := sort.Search(len(s.Contacts), func(i int) bool {
 		return s.Contacts[i].distance.Less(contact.distance) || s.Contacts[i].distance.Equals(contact.distance)
 	})
 
-	// Insert at the found position
 	s.Contacts = append(s.Contacts, Contact{})
 	copy(s.Contacts[position+1:], s.Contacts[position:])
 	s.Contacts[position] = contact
 }
 
 func (kademlia *Kademlia) LookupData(hash string) (string, string, []Contact) {
-	// Find the closest contacts to the target hash
 	closestContacts := kademlia.LookupContact(NewKademliaID(hash))
-
-	// Create a channel to receive the responses
 	responseCh := make(chan Message, len(closestContacts))
 	errorMsg := &Message{
 		Type: "Error",
 		Data: []byte("Error in request"),
 	}
 
-	// Use a WaitGroup to wait for all queries to complete
 	var wg sync.WaitGroup
 
 	for _, contact := range closestContacts {
@@ -169,7 +149,6 @@ func (kademlia *Kademlia) LookupData(hash string) (string, string, []Contact) {
 		go func(contact Contact) {
 			defer wg.Done()
 
-			// Ask the contact for the data associated with the hash
 			dataCh, err := kademlia.Network.SendFindDataMessage(&contact, hash)
 			if err != nil {
 				log.Printf("Failed to send find data message to %s: %v", contact.Address, err)
@@ -177,29 +156,24 @@ func (kademlia *Kademlia) LookupData(hash string) (string, string, []Contact) {
 				return
 			}
 
-			// Wait for the response or a timeout
 			select {
 			case data := <-dataCh:
 				responseCh <- data
-			case <-time.After(10 * time.Second): // Adjust the timeout as needed
+			case <-time.After(10 * time.Second):
 				log.Printf("Timed out waiting for data response from %s", contact.Address)
 				responseCh <- *errorMsg
 			}
 		}(contact)
 	}
 
-	// Wait for all queries to complete
 	wg.Wait()
 	close(responseCh)
 
-	// Process the responses
 	for data := range responseCh {
 		if data.Type != "Error" {
 			return string(data.Data), string(data.KademliaID), nil
 		}
 	}
-
-	// If we've checked all closest nodes and didn't find the data, return the closest contacts
 	return "Could not find data", " ", closestContacts
 }
 
@@ -213,8 +187,6 @@ func (kademlia *Kademlia) FindLocalData(hash string) (string, []byte) {
 }
 
 func (kademlia *Kademlia) Store(data []byte) string {
-	println("Store is : ", string(data))
-	// Compute the hash of the data
 	hash := sha1.Sum(data)
 	hashString := hex.EncodeToString(hash[:])
 	dataTarget := kademlia.LookupContact(NewKademliaID(hashString))
@@ -225,6 +197,7 @@ func (kademlia *Kademlia) Store(data []byte) string {
 	for _, contact := range dataTarget {
 		if kademlia.Network.Node.ID == contact.ID {
 			kademlia.addData(data)
+			continue
 		}
 		dataCh, err := kademlia.Network.SendStoreMessage(&contact, data)
 		if err != nil {
@@ -235,7 +208,7 @@ func (kademlia *Kademlia) Store(data []byte) string {
 		select {
 		case data := <-dataCh:
 			responseCh <- data
-		case <-time.After(10 * time.Second): // Adjust the timeout as needed
+		case <-time.After(10 * time.Second):
 			log.Printf("Timed out waiting for data response from %s", contact.Address)
 			responseCh <- nil
 		}

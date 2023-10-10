@@ -3,48 +3,10 @@ package logic
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"strings"
 	"testing"
 )
 
-func TestKademliaDataFunctions(t *testing.T) {
-	// Initialize a mock Kademlia instance
-	kademlia := &Kademlia{
-		Network:  nil, // As it's not used in the functions we're testing
-		DataList: []DataStore{},
-	}
-
-	// Test addData
-	data := []byte("Test Data")
-	kademlia.addData(data)
-
-	if len(kademlia.DataList) != 1 {
-		t.Fatalf("expected 1 item in DataList, got %d", len(kademlia.DataList))
-	}
-
-	hash := sha1.Sum(data)
-	hashString := hex.EncodeToString(hash[:])
-
-	if kademlia.DataList[0].Hash != hashString || string(kademlia.DataList[0].Data) != string(data) {
-		t.Fatalf("stored data or hash doesn't match. Expected hash %s with data %s, got hash %s with data %s",
-			hashString, string(data), kademlia.DataList[0].Hash, string(kademlia.DataList[0].Data))
-	}
-
-	// Test PrintData
-	expectedOutput := `Stored Data:
-Item 1:
-  Hash: ` + hashString + `
-  Data: Test Data
-`
-	printedData := kademlia.PrintData()
-
-	if !strings.EqualFold(printedData, expectedOutput) {
-		t.Fatalf("Printed data doesn't match expected output. Expected:\n%s\nGot:\n%s", expectedOutput, printedData)
-	}
-}
-
 func TestKademliaFindLocalData(t *testing.T) {
-	// Initialize a mock Kademlia instance with some data
 	data := []byte("Test Data")
 	hash := sha1.Sum(data)
 	hashString := hex.EncodeToString(hash[:])
@@ -70,7 +32,6 @@ func TestKademliaFindLocalData(t *testing.T) {
 }
 
 func TestAllContactsAdd(t *testing.T) {
-	// Mock data
 	contact1 := NewContact(NewKademliaID("FFFFFFFF00000000000000000000000000000000"), "localhost:8001")
 	contact2 := NewContact(NewKademliaID("EEEEEEEE00000000000000000000000000000000"), "localhost:8002")
 	target := NewKademliaID("DDDDDDDD00000000000000000000000000000000")
@@ -81,12 +42,34 @@ func TestAllContactsAdd(t *testing.T) {
 		Seen:     make(map[string]bool),
 	}
 
-	// Add contacts
 	allContactsInstance.Add(contact1, target)
 	allContactsInstance.Add(contact2, target)
 
-	// Test order based on distance
+	// Test distance
 	if !allContactsInstance.Contacts[0].ID.Equals(contact2.ID) || !allContactsInstance.Contacts[1].ID.Equals(contact1.ID) {
 		t.Fatal("Contacts not in expected order based on distance")
 	}
 }
+
+func TestJoinNetwork(t *testing.T) {
+	net := InitNetwork(NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51"), "localhost:8000")
+	k := net.Kademlia
+	k.JoinNetwork()
+	contacts := k.LookupContact(net.Node.ID)
+	if len(contacts) == 0 {
+		t.Fatal("Failed to join network")
+	}
+}
+
+/*func TestLookUpData(t *testing.T) {
+	node1 := InitNetwork(NewKademliaID("27f2d5effb3dcfe4d7bdd17e64a3101226648a51"), "localhost:8000")
+
+	data := []byte("Test")
+
+	hashString := node1.Kademlia.Store(data)
+
+	if hashString == "Failed to store data" || hashString == "Failed to return data" {
+		t.Fatalf("Failed to store data: %s", hashString)
+	}
+}
+*/
